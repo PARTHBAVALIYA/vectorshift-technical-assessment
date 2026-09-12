@@ -1,6 +1,6 @@
-// textNode.js
+﻿// textNode.js
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Position } from 'reactflow';
 import { BaseNode } from './baseNode';
 
@@ -10,29 +10,40 @@ export const TextNode = ({ id, data }) => {
   const textareaRef = useRef(null);
 
   useEffect(() => {
-    // Extract variables
-    const regex = /{{\s*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*}}/g;
-    const matches = [];
-    let match;
-    while ((match = regex.exec(currText)) !== null) {
-      if (!matches.includes(match[1])) {
-        matches.push(match[1]);
+    // Debounce variable extraction to avoid canvas handle flickering on fast keystrokes
+    const timeoutId = setTimeout(() => {
+      const regex = /{{\s*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*}}/g;
+      const matches = [];
+      let match;
+      while ((match = regex.exec(currText)) !== null) {
+        if (!matches.includes(match[1])) {
+          matches.push(match[1]);
+        }
       }
-    }
-    setVariables(matches);
+      // Only update state if variable list actually changed
+      setVariables((prev) => {
+        if (prev.length === matches.length && prev.every((v, idx) => v === matches[idx])) {
+          return prev;
+        }
+        return matches;
+      });
+    }, 150);
 
-    // Auto-resize
+    // Auto-resize immediately for smooth text typing feel
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
+
+    return () => clearTimeout(timeoutId);
   }, [currText]);
 
   const handleTextChange = (e) => {
     setCurrText(e.target.value);
   };
 
-  const handles = [
+  // Memoize handle configurations to prevent unnecessary ReactFlow handle re-renders
+  const handles = useMemo(() => [
     { type: 'source', position: Position.Right, id: `${id}-output` },
     ...variables.map((v, i) => ({
       type: 'target', 
@@ -40,7 +51,7 @@ export const TextNode = ({ id, data }) => {
       id: `${id}-${v}`,
       style: { top: `${((i + 1) * 100) / (variables.length + 1)}%` }
     }))
-  ];
+  ], [id, variables]);
 
   return (
     <BaseNode id={id} label="Text" handles={handles} style={{ height: 'auto', minHeight: 80, minWidth: 200, width: Math.max(200, currText.length * 8 + 40) }}>
@@ -61,4 +72,4 @@ export const TextNode = ({ id, data }) => {
       </label>
     </BaseNode>
   );
-}
+};
